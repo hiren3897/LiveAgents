@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Automation Lab & 3D Interactive AI Copilot World (Single-File Standalone Fallback)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: #060a14;
+      color: #e2e8f0;
+      font-family: 'Inter', -apple-system, sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+    #webgl-container { position: absolute; inset: 0; z-index: 1; }
+    
+    /* Top HUD */
+    .top-hud {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      z-index: 20;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .hud-card {
+      pointer-events: auto;
+      background: rgba(8, 13, 26, 0.88);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 243, 255, 0.35);
+      border-radius: 12px;
+      padding: 10px 16px;
+      box-shadow: 0 0 25px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 243, 255, 0.15);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .hud-title { font-size: 13px; font-weight: 800; letter-spacing: 0.5px; color: #fff; }
+    .hud-sub { font-size: 10px; color: #94a3b8; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .badge-healthy { background: rgba(6, 78, 59, 0.5); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; }
+    .badge-failing { background: rgba(136, 19, 55, 0.5); border: 1px solid rgba(244, 63, 94, 0.4); color: #fb7185; }
+    .badge-repairing { background: rgba(120, 53, 15, 0.5); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; }
+
+    .btn {
+      pointer-events: auto;
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn:hover { border-color: #00f3ff; color: #00f3ff; box-shadow: 0 0 10px rgba(0, 243, 255, 0.3); }
+    .btn-fault { background: linear-gradient(135deg, #881337, #be123c); border-color: #f43f5e; color: #fff; }
+    .btn-fault:hover { box-shadow: 0 0 15px rgba(244, 63, 94, 0.5); }
+
+    /* PiP Camera Monitor (Top Right) */
+    .pip-monitor {
+      position: absolute;
+      top: 80px;
+      right: 16px;
+      width: 320px;
+      height: 250px;
+      background: rgba(8, 13, 26, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 243, 255, 0.4);
+      border-radius: 12px;
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .pip-header {
+      padding: 6px 12px;
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid rgba(0, 243, 255, 0.25);
+      font-size: 11px;
+      font-weight: 700;
+      color: #00f3ff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .pip-canvas-wrap { position: relative; flex: 1; background: #000; overflow: hidden; }
+    #pip-canvas { width: 100%; height: 100%; display: block; }
+    .pip-overlay {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      background: rgba(0,0,0,0.7);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid #334155;
+      font-size: 9px;
+      color: #38bdf8;
+    }
+
+    /* Bottom Widgets */
+    .bottom-container {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      right: 16px;
+      z-index: 20;
+      display: flex;
+      gap: 16px;
+      pointer-events: none;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .bottom-panel {
+      pointer-events: auto;
+      background: rgba(8, 13, 26, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 243, 255, 0.35);
+      border-radius: 12px;
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 243, 255, 0.1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .log-panel { width: 440px; height: 320px; }
+    .copilot-panel { width: 420px; height: 320px; }
+    
+    .panel-header {
+      padding: 8px 12px;
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid rgba(0, 243, 255, 0.25);
+      font-size: 11px;
+      font-weight: 700;
+      color: #00f3ff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .log-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .log-item {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 10px;
+      line-height: 1.4;
+      transition: all 0.15s;
+    }
+    .log-item:hover { border-color: rgba(0, 243, 255, 0.5); }
+    .log-meta { display: flex; justify-content: space-between; margin-bottom: 2px; }
+    .log-sender { color: #00f3ff; font-weight: 700; }
+    .log-sig { color: #f59e0b; }
+    .log-msg { color: #e2e8f0; }
+
+    /* Copilot Waveform & Controls */
+    .copilot-body { padding: 12px; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+    .waveform-wrap {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 36px;
+      background: rgba(0,0,0,0.6);
+      padding: 4px;
+      border-radius: 6px;
+      border: 1px solid #1e293b;
+    }
+    .wave-bar {
+      flex: 1;
+      background: #00f3ff;
+      border-radius: 2px;
+      min-height: 15%;
+      transition: height 0.1s ease;
+    }
+    .transcript-box {
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 8px;
+      font-size: 11px;
+      color: #67e8f9;
+      font-style: italic;
+      min-height: 48px;
+      line-height: 1.4;
+    }
+    .copilot-input-wrap {
+      display: flex;
+      gap: 6px;
+    }
+    .copilot-input {
+      flex: 1;
+      background: #000;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: #fff;
+      font-size: 11px;
+      font-family: inherit;
+      outline: none;
+    }
+    .copilot-input:focus { border-color: #00f3ff; }
+
+    /* Drone 3D Floating Tag */
+    .drone-status-tag {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(8, 13, 26, 0.9);
+      border: 1px solid rgba(0, 243, 255, 0.4);
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      color: #38bdf8;
+      box-shadow: 0 0 20px rgba(0, 243, 255, 0.2);
+      pointer-events: none;
+      z-index: 15;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- WebGL 3D Canvas Container -->
+  <div id="webgl-container"></div>
+
+  <!-- Top Matrix HUD -->
+  <div class="top-hud">
+    <div class="hud-card">
+      <div style="font-size: 20px; color: #00f3ff;">⚡</div>
+      <div>
+        <div class="hud-title">LIVE AUTOMATION LAB (4x3 MATRIX)</div>
+        <div class="hud-sub">70 Addressable Panels · Parametric Floor Stands</div>
+      </div>
+    </div>
+
+    <div class="hud-card">
+      <div class="badge badge-healthy"><span id="metric-healthy">70</span> HEALTHY</div>
+      <div class="badge badge-failing"><span id="metric-failing">0</span> FAILING</div>
+      <div class="badge badge-repairing"><span id="metric-repairing">0</span> INTERVENTION</div>
+    </div>
+
+    <div style="display: flex; gap: 8px;">
+      <button class="btn btn-fault" onclick="triggerManualAnomaly()">⚡ Inject Fault</button>
+      <button class="btn" onclick="resetAllDisplays()">↺ Reset All</button>
+      <button class="btn" onclick="toggleCameraMode()">🎥 Cam Mode</button>
+    </div>
+  </div>
+
+  <!-- PiP Optical Camera Monitor -->
+  <div class="pip-monitor">
+    <div class="pip-header">
+      <span>OPTICAL PiP MONITOR</span>
+      <span id="pip-target-label" style="color: #94a3b8;">TV-01</span>
+    </div>
+    <div class="pip-canvas-wrap">
+      <canvas id="pip-canvas" width="320" height="200"></canvas>
+      <div class="pip-overlay">REC · 59.94 FPS · 1080p</div>
+    </div>
+  </div>
+
+  <!-- Real-Time Drone Action Ticker -->
+  <div class="drone-status-tag" id="drone-action-tag">
+    AeroBot-MK4: Dormant at Sleep Bench (Telemetry Nominal)
+  </div>
+
+  <!-- Bottom Swarm Console & Copilot -->
+  <div class="bottom-container">
+    <!-- Glowing Cyber-Log Console -->
+    <div class="bottom-panel log-panel">
+      <div class="panel-header">
+        <span>SWARM COMM BUS (STRUCTURED JSON)</span>
+        <span style="font-size: 9px; color: #94a3b8;" id="log-count">0 EVTS</span>
+      </div>
+      <div class="log-list" id="log-feed"></div>
+    </div>
+
+    <!-- Copilot Waveform & Voice Terminal -->
+    <div class="bottom-panel copilot-panel">
+      <div class="panel-header">
+        <span>AETHER-7 COPILOT BRAIN</span>
+        <span style="font-size: 9px; color: #34d399;">ONLINE</span>
+      </div>
+      <div class="copilot-body">
+        <div style="font-size: 10px; color: #94a3b8; display: flex; justify-content: space-between;">
+          <span>AUDIO FREQ SYNTHESIZER</span>
+          <span id="voice-state" style="color: #00f3ff;">STANDBY</span>
+        </div>
+        <div class="waveform-wrap" id="waveform-wrap"></div>
+        <div class="transcript-box" id="transcript-box">
+          "Autonomous Lab Copilot is monitoring 70 TV panels across 12 floor mounts."
+        </div>
+        <div class="copilot-input-wrap">
+          <input type="text" id="user-input" class="copilot-input" placeholder="Ask 'Which TVs are broken?' or type command..." onkeydown="if(event.key==='Enter') sendOperatorQuery()">
+          <button class="btn" onclick="sendOperatorQuery()">Ask</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- 1. STATE & PARAMETRIC MATRIX DEFINITION ---
+    const CONFIG = {
+      rows: 4,
+      cols: 3,
+      spacingX: 7.5,
+      spacingZ: 6.5,
+      totalTvs: 70,
+      packetDropRate: 0.08,
+      propagationDelayMs: 220
+    };
+
+    const stands = {};
+    const tvs = {};
+    const tvMeshes = {};
+    let selectedTvId = 'TV-01';
+
+    // Generate 4x3 stands with 6 TVs each (3 front aisle, 3 back aisle)
+    let tvCount = 0;
+    for (let r = 0; r < CONFIG.rows; r++) {
+      for (let c = 0; c < CONFIG.cols; c++) {
+        const standId = `STAND-R${r+1}C${c+1}`;
+        const posX = (c - (CONFIG.cols - 1) / 2) * CONFIG.spacingX;
+        const posZ = (r - (CONFIG.rows - 1) / 2) * CONFIG.spacingZ;
+        stands[standId] = { id: standId, pos: [posX, 0, posZ], tvIds: [] };
+
+        ['front', 'back'].forEach(side => {
+          for (let level = 0; level < 3; level++) {
+            if (tvCount >= CONFIG.totalTvs) break;
+            tvCount++;
+            const tvId = `TV-${String(tvCount).padStart(2, '0')}`;
+            stands[standId].tvIds.push(tvId);
+            tvs[tvId] = {
+              id: tvId,
+              standId,
+              side,
+              level,
+              status: 'healthy',
+              errorType: null,
+              temp: 38 + Math.floor(Math.random() * 4)
+            };
+          }
+        });
+      }
+    }
+
+    // Drone State
+    const sleepBenchPos = [-14, 0.6, 0];
+    const bot = {
+      name: 'AeroBot-MK4',
+      pos: [...sleepBenchPos],
+      targetPos: [...sleepBenchPos],
+      phase: 'SLEEP_BENCH',
+      currentTvId: null,
+      targetStandId: null,
+      progress: 0,
+      label: 'Dormant at Sleep Bench (Telemetry Nominal)',
+      retries: 0
+    };
+
+    // --- 2. THREE.JS 3D PROCEDURAL SCENE ---
+    const container = document.getElementById('webgl-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x060a14);
+    scene.fog = new THREE.Fog(0x060a14, 25, 65);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(20, 16, 22);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2 - 0.05;
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const dirLight = new THREE.DirectionalLight(0xe2e8f0, 1.2);
+    dirLight.position.set(15, 25, 12);
+    scene.add(dirLight);
+
+    const rimLight = new THREE.DirectionalLight(0x00f3ff, 0.6);
+    rimLight.position.set(-15, 12, -15);
+    scene.add(rimLight);
+
+    // Floor & Grid
+    const floorGeo = new THREE.PlaneGeometry(50, 45);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x0b1120, roughness: 0.4, metalness: 0.7 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
+
+    const grid = new THREE.GridHelper(50, 30, 0x1e293b, 0x0f172a);
+    grid.position.y = 0.01;
+    scene.add(grid);
+
+    // Build Floor Stands & TVs
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x2d3748, metalness: 0.9, roughness: 0.2 });
+    const tvChassisMat = new THREE.MeshStandardMaterial({ color: 0x0c1017, metalness: 0.7, roughness: 0.4 });
+
+    Object.values(stands).forEach(stand => {
+      const standGroup = new THREE.Group();
+      standGroup.position.set(...stand.pos);
+
+      // Support Pole
+      const poleGeo = new THREE.CylinderGeometry(0.14, 0.16, 4.4, 20);
+      const pole = new THREE.Mesh(poleGeo, poleMat);
+      pole.position.y = 2.2;
+      standGroup.add(pole);
+
+      // Base Plate
+      const baseGeo = new THREE.CylinderGeometry(1.1, 1.25, 0.16, 20);
+      const base = new THREE.Mesh(baseGeo, poleMat);
+      base.position.y = 0.08;
+      standGroup.add(base);
+
+      // TVs
+      stand.tvIds.forEach(tvId => {
+        const tv = tvs[tvId];
+        const tvGroup = new THREE.Group();
+        const yPos = 1.2 + tv.level * 1.05;
+        const zPos = tv.side === 'front' ? 0.3 : -0.3;
+        const rotY = tv.side === 'front' ? 0 : Math.PI;
+
+        tvGroup.position.set(0, yPos, zPos);
+        tvGroup.rotation.y = rotY;
+
+        // Bezel
+        const bezelGeo = new THREE.BoxGeometry(1.72, 1.02, 0.07);
+        const bezel = new THREE.Mesh(bezelGeo, tvChassisMat);
+        tvGroup.add(bezel);
+
+        // Screen
+        const screenGeo = new THREE.BoxGeometry(1.64, 0.94, 0.015);
+        const screenMat = new THREE.MeshStandardMaterial({
+          color: 0x00ff66,
+          emissive: 0x00ff66,
+          emissiveIntensity: 0.4,
+          roughness: 0.2
+        });
+        const screen = new THREE.Mesh(screenGeo, screenMat);
+        screen.position.z = 0.038;
+        tvGroup.add(screen);
+
+        tvMeshes[tvId] = screenMat;
+        standGroup.add(tvGroup);
+      });
+
+      scene.add(standGroup);
+    });
+
+    // Aisle Cameras (Yellow Glowing Spheres)
+    for (let r = 0; r <= CONFIG.rows; r++) {
+      const aisleZ = (r - CONFIG.rows / 2) * CONFIG.spacingZ;
+      for (let c = 0; c < CONFIG.cols; c++) {
+        const aisleX = (c - (CONFIG.cols - 1) / 2) * CONFIG.spacingX;
+        const camGroup = new THREE.Group();
+        camGroup.position.set(aisleX, 3.8, aisleZ);
+
+        const sphereGeo = new THREE.SphereGeometry(0.22, 16, 16);
+        const sphereMat = new THREE.MeshStandardMaterial({
+          color: 0xffcc00,
+          emissive: 0xffcc00,
+          emissiveIntensity: 1.4
+        });
+        const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+        camGroup.add(sphere);
+
+        const ptLight = new THREE.PointLight(0xffcc00, 0.8, 6);
+        camGroup.add(ptLight);
+
+        scene.add(camGroup);
+      }
+    }
+
+    // Sleep Bench
+    const benchGroup = new THREE.Group();
+    benchGroup.position.set(...sleepBenchPos);
+    const benchPlate = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.8, 2.1, 0.1, 8),
+      new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.9 })
+    );
+    benchPlate.position.y = 0.05;
+    benchGroup.add(benchPlate);
+
+    const padRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.8, 1.4, 32),
+      new THREE.MeshStandardMaterial({ color: 0x00f3ff, emissive: 0x00f3ff, emissiveIntensity: 0.6, side: THREE.DoubleSide })
+    );
+    padRing.rotation.x = -Math.PI / 2;
+    padRing.position.y = 0.11;
+    benchGroup.add(padRing);
+    scene.add(benchGroup);
+
+    // Procedural Drone Bot (Chrome Sphere + Rotors + Cyan PointLight)
+    const droneGroup = new THREE.Group();
+    droneGroup.position.set(...bot.pos);
+
+    // Chrome Sphere Core
+    const droneCore = new THREE.Mesh(
+      new THREE.SphereGeometry(0.42, 32, 32),
+      new THREE.MeshStandardMaterial({ color: 0xd0e8ff, metalness: 0.96, roughness: 0.08 })
+    );
+    droneGroup.add(droneCore);
+
+    // Cyan Equator Ring
+    const equatorRing = new THREE.Mesh(
+      new THREE.TorusGeometry(0.45, 0.03, 16, 64),
+      new THREE.MeshStandardMaterial({ color: 0x00f3ff, emissive: 0x00f3ff, emissiveIntensity: 1.8 })
+    );
+    equatorRing.rotation.x = Math.PI / 2;
+    droneGroup.add(equatorRing);
+
+    // Cyan Point Light
+    const droneLight = new THREE.PointLight(0x00f3ff, 3.5, 10);
+    droneGroup.add(droneLight);
+
+    // 4 Rotors
+    const rotorArms = [
+      [0.7, 0.15, 0.7],
+      [-0.7, 0.15, 0.7],
+      [0.7, 0.15, -0.7],
+      [-0.7, 0.15, -0.7]
+    ];
+    const rotorMeshes = [];
+    rotorArms.forEach(pos => {
+      const armGroup = new THREE.Group();
+      armGroup.position.set(...pos);
+
+      const guardRing = new THREE.Mesh(
+        new THREE.TorusGeometry(0.32, 0.02, 12, 32),
+        new THREE.MeshStandardMaterial({ color: 0x00f3ff, emissive: 0x00f3ff, emissiveIntensity: 0.6 })
+      );
+      guardRing.rotation.x = Math.PI / 2;
+      armGroup.add(guardRing);
+
+      const blade = new THREE.Mesh(
+        new THREE.BoxGeometry(0.56, 0.015, 0.05),
+        new THREE.MeshStandardMaterial({ color: 0x00f3ff, transparent: true, opacity: 0.85 })
+      );
+      armGroup.add(blade);
+      rotorMeshes.push(blade);
+
+      droneGroup.add(armGroup);
+    });
+
+    scene.add(droneGroup);
+
+    // --- 3. ORCHESTRATOR & SIMULATION LOOPS ---
+    let cameraMode = 'ORBIT_ROOM';
+    let orbitAngle = 0;
+    let stepStartTime = Date.now();
+    let stepDuration = 2000;
+
+    function addLog(sender, recipient, severity, priority, sig, msg) {
+      const feed = document.getElementById('log-feed');
+      const item = document.createElement('div');
+      item.className = 'log-item';
+      item.innerHTML = `
+        <div class="log-meta">
+          <span class="log-sender">${sender} ➔ ${recipient}</span>
+          <span class="log-sig">${sig}</span>
+        </div>
+        <div class="log-msg">${msg}</div>
+      `;
+      feed.prepend(item);
+      if (feed.children.length > 50) feed.removeChild(feed.lastChild);
+      document.getElementById('log-count').innerText = `${feed.children.length} EVTS`;
+    }
+
+    // Initial Logs
+    addLog('BACKEND_ORCHESTRATOR', 'ALL', 'LOW', 'P3', 'SYS_BOOT_OK', 'Physical 4x3 Stand Matrix Booted. 70 TVs operational.');
+    addLog('TEST_AGENT', 'REPAIR_AGENT', 'LOW', 'P3', 'HEARTBEAT_ACK', 'Watchdog armed. Monitoring TMDS video clocks.');
+
+    function updateMetrics() {
+      const all = Object.values(tvs);
+      const healthy = all.filter(t => t.status === 'healthy').length;
+      const failing = all.filter(t => t.status === 'failing').length;
+      const repairing = all.filter(t => t.status === 'repairing').length;
+
+      document.getElementById('metric-healthy').innerText = healthy;
+      document.getElementById('metric-failing').innerText = failing;
+      document.getElementById('metric-repairing').innerText = repairing;
+    }
+
+    function triggerManualAnomaly(targetId) {
+      const healthy = Object.keys(tvs).filter(id => tvs[id].status === 'healthy');
+      const id = targetId || healthy[Math.floor(Math.random() * healthy.length)];
+      if (!id) return;
+
+      const errors = ['HDMI_HANDSHAKE_LOSS', 'POWER_CYCLE_FAILURE', 'SIGNAL_DESYNC', 'EDID_CORRUPTION'];
+      const err = errors[Math.floor(Math.random() * errors.length)];
+      
+      tvs[id].status = 'failing';
+      tvs[id].errorType = err;
+      selectedTvId = id;
+      document.getElementById('pip-target-label').innerText = id;
+
+      // Update screen mesh to red
+      tvMeshes[id].color.setHex(0xff3333);
+      tvMeshes[id].emissive.setHex(0xff3333);
+      tvMeshes[id].emissiveIntensity = 1.2;
+
+      updateMetrics();
+
+      addLog('TEST_AGENT', 'REPAIR_AGENT', 'HIGH', 'P1', `ERR_${err}`, `Anomaly detected on ${id} (${tvs[id].standId}). ${err.replace(/_/g, ' ')}. Latency spiked.`);
+    }
+
+    function resetAllDisplays() {
+      Object.keys(tvs).forEach(id => {
+        tvs[id].status = 'healthy';
+        tvs[id].errorType = null;
+        tvMeshes[id].color.setHex(0x00ff66);
+        tvMeshes[id].emissive.setHex(0x00ff66);
+        tvMeshes[id].emissiveIntensity = 0.4;
+      });
+      bot.phase = 'SLEEP_BENCH';
+      bot.targetPos = [...sleepBenchPos];
+      bot.label = 'Dormant at Sleep Bench (Telemetry Nominal)';
+      updateMetrics();
+      addLog('BACKEND_ORCHESTRATOR', 'ALL', 'LOW', 'P3', 'SYS_RESET_FULL', 'Global override: All displays restored to 100% nominal.');
+    }
+
+    function toggleCameraMode() {
+      cameraMode = cameraMode === 'ORBIT_ROOM' ? 'FOLLOW_BOT' : 'ORBIT_ROOM';
+      addLog('UI_3D_ARCHITECT', 'USER', 'LOW', 'P3', 'CAM_SWITCH', `Camera mode changed to: ${cameraMode}`);
+    }
+
+    // Auto-fault tick every 10 seconds
+    setInterval(() => {
+      const failingCount = Object.values(tvs).filter(t => t.status === 'failing' || t.status === 'repairing').length;
+      if (failingCount < 2) triggerManualAnomaly();
+    }, 10000);
+
+    // Bot Dispatch & State Machine Loop
+    setInterval(() => {
+      if (bot.phase === 'SLEEP_BENCH') {
+        const failing = Object.values(tvs).filter(t => t.status === 'failing');
+        if (failing.length > 0) {
+          const nextTv = failing[0];
+          const stand = stands[nextTv.standId];
+          const tvHeight = 1.2 + nextTv.level * 1.05;
+          const zOffset = nextTv.side === 'front' ? 2.0 : -2.0;
+
+          bot.phase = 'NAVIGATING';
+          bot.currentTvId = nextTv.id;
+          bot.targetStandId = stand.id;
+          bot.targetPos = [stand.pos[0], tvHeight, stand.pos[2] + zOffset];
+          bot.label = `Deploying drone -> ${nextTv.id} (${stand.id})`;
+          
+          nextTv.status = 'repairing';
+          tvMeshes[nextTv.id].color.setHex(0xff9900);
+          tvMeshes[nextTv.id].emissive.setHex(0xff9900);
+          selectedTvId = nextTv.id;
+          document.getElementById('pip-target-label').innerText = nextTv.id;
+
+          stepStartTime = Date.now();
+          stepDuration = 2400;
+          updateMetrics();
+
+          addLog('BACKEND_ORCHESTRATOR', 'REPAIR_AGENT', 'HIGH', 'P1', 'DISPATCH_BOT', `Work order dispatched to ${nextTv.id} at ${stand.id}.`);
+        }
+      } else {
+        // Handle Phase Transitions
+        const elapsed = Date.now() - stepStartTime;
+        const currentTv = tvs[bot.currentTvId];
+        if (!currentTv) return;
+
+        if (elapsed > stepDuration) {
+          if (bot.phase === 'NAVIGATING') {
+            bot.phase = 'ANALYZING_FEED';
+            bot.label = `Analyzing optical video raster on ${currentTv.id}...`;
+            stepStartTime = Date.now();
+            stepDuration = 1800;
+            addLog('REPAIR_AGENT', 'TEST_AGENT', 'MEDIUM', 'P2', 'FEED_LOCK', `Optical lock on ${currentTv.id}. Frame buffer acquired.`);
+          } else if (bot.phase === 'ANALYZING_FEED') {
+            // Check packet drop chance
+            if (Math.random() < CONFIG.packetDropRate && bot.retries === 0) {
+              bot.retries++;
+              bot.label = `[PACKET LOSS] IR burst dropped! Retrying...`;
+              stepStartTime = Date.now();
+              stepDuration = 1200;
+              addLog('REPAIR_AGENT', 'BACKEND_ORCHESTRATOR', 'HIGH', 'P1', 'IR_PACKET_DROP_ERR', `433MHz packet dropped. Executing preamble retry.`);
+              return;
+            }
+            bot.phase = 'TRANSMITTING_IR';
+            bot.label = `Transmitting IR command burst (${currentTv.errorType})...`;
+            stepStartTime = Date.now();
+            stepDuration = 2200;
+            addLog('REPAIR_AGENT', 'TEST_AGENT', 'LOW', 'P2', 'IR_TX', `Hex payload burst transmitted. Propagation delay ${CONFIG.propagationDelayMs}ms.`);
+          } else if (bot.phase === 'TRANSMITTING_IR') {
+            bot.phase = 'VERIFYING_SYNC';
+            bot.label = `Verifying HDMI clock & 1080p stream sync...`;
+            stepStartTime = Date.now();
+            stepDuration = 1600;
+            addLog('TEST_AGENT', 'REPAIR_AGENT', 'LOW', 'P3', 'SYNC_POLL', `Verifying TMDS clock integrity on ${currentTv.id}.`);
+          } else if (bot.phase === 'VERIFYING_SYNC') {
+            currentTv.status = 'healthy';
+            currentTv.errorType = null;
+            tvMeshes[currentTv.id].color.setHex(0x00ff66);
+            tvMeshes[currentTv.id].emissive.setHex(0x00ff66);
+            tvMeshes[currentTv.id].emissiveIntensity = 0.4;
+            updateMetrics();
+
+            bot.phase = 'SYSTEM_RESTORED';
+            bot.label = `Verification SUCCESS: ${currentTv.id} Restored!`;
+            stepStartTime = Date.now();
+            stepDuration = 1200;
+            addLog('TEST_AGENT', 'ALL', 'LOW', 'P3', 'RESTORE_OK', `Display ${currentTv.id} fully restored to nominal 60.0 FPS.`);
+          } else if (bot.phase === 'SYSTEM_RESTORED') {
+            bot.phase = 'SLEEP_BENCH';
+            bot.targetPos = [...sleepBenchPos];
+            bot.label = 'Returning to Sleep Bench. Lab operational.';
+            bot.retries = 0;
+            addLog('REPAIR_AGENT', 'BACKEND_ORCHESTRATOR', 'LOW', 'P3', 'DOCK_BENCH', 'Drone returned to charging bench.');
+          }
+        }
+      }
+
+      document.getElementById('drone-action-tag').innerText = `${bot.name}: ${bot.label}`;
+    }, 100);
+
+    // --- 4. OPTICAL PiP CANVAS SIMULATION ---
+    const pipCanvas = document.getElementById('pip-canvas');
+    const pipCtx = pipCanvas.getContext('2d');
+    let pipFrame = 0;
+
+    function renderPip() {
+      pipFrame++;
+      const w = pipCanvas.width;
+      const h = pipCanvas.height;
+      const curTv = tvs[selectedTvId] || Object.values(tvs)[0];
+
+      if (curTv.status === 'healthy') {
+        const barWidth = w / 7;
+        const colors = ['#ffffff', '#ffff00', '#00ffff', '#00ff00', '#ff00ff', '#ff0000', '#0000ff'];
+        colors.forEach((col, idx) => {
+          pipCtx.fillStyle = col;
+          pipCtx.fillRect(idx * barWidth, 0, barWidth, h * 0.75);
+        });
+        pipCtx.fillStyle = '#0a0f1d';
+        pipCtx.fillRect(0, h * 0.75, w, h * 0.25);
+        pipCtx.fillStyle = '#00ff66';
+        pipCtx.fillRect((pipFrame * 3) % w, h * 0.75, 40, h * 0.25);
+      } else if (curTv.status === 'failing') {
+        const imgData = pipCtx.createImageData(w, h);
+        const buf = new Uint32Array(imgData.data.buffer);
+        for (let i = 0; i < buf.length; i++) {
+          const noise = Math.random() * 255;
+          buf[i] = (255 << 24) | (Math.floor(noise * 0.2) << 16) | (Math.floor(noise * 0.2) << 8) | Math.floor(noise * 0.9);
+        }
+        pipCtx.putImageData(imgData, 0, 0);
+
+        pipCtx.fillStyle = 'rgba(20, 0, 0, 0.85)';
+        pipCtx.fillRect(w * 0.1, h * 0.35, w * 0.8, h * 0.3);
+        pipCtx.fillStyle = '#ff4444';
+        pipCtx.font = 'bold 11px monospace';
+        pipCtx.fillText(`ERR: ${curTv.errorType || 'NO SIGNAL'}`, w * 0.15, h * 0.52);
+      } else {
+        pipCtx.fillStyle = '#080d1a';
+        pipCtx.fillRect(0, 0, w, h);
+        pipCtx.fillStyle = '#ff9900';
+        pipCtx.fillRect(15, h - 25, (w - 30) * ((Date.now() - stepStartTime) / stepDuration), 10);
+      }
+
+      // Crosshairs
+      pipCtx.strokeStyle = '#00f3ff55';
+      pipCtx.beginPath();
+      pipCtx.moveTo(w / 2 - 20, h / 2); pipCtx.lineTo(w / 2 + 20, h / 2);
+      pipCtx.moveTo(w / 2, h / 2 - 20); pipCtx.lineTo(w / 2, h / 2 + 20);
+      pipCtx.stroke();
+
+      requestAnimationFrame(renderPip);
+    }
+    renderPip();
+
+    // --- 5. CSS WAVEFORM & SPEECH SYNTHESIS FALLBACK ---
+    const waveWrap = document.getElementById('waveform-wrap');
+    for (let i = 0; i < 24; i++) {
+      const bar = document.createElement('div');
+      bar.className = 'wave-bar';
+      waveWrap.appendChild(bar);
+    }
+
+    let isSpeaking = false;
+    function speakText(text) {
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.rate = 1.05;
+      utt.pitch = 1.0;
+      utt.onstart = () => {
+        isSpeaking = true;
+        document.getElementById('voice-state').innerText = 'TRANSMITTING';
+      };
+      utt.onend = () => {
+        isSpeaking = false;
+        document.getElementById('voice-state').innerText = 'STANDBY';
+      };
+      window.speechSynthesis.speak(utt);
+    }
+
+    function sendOperatorQuery() {
+      const input = document.getElementById('user-input');
+      const q = input.value.trim().toLowerCase();
+      if (!q) return;
+      input.value = '';
+
+      let reply = '';
+      const failing = Object.values(tvs).filter(t => t.status === 'failing' || t.status === 'repairing');
+      if (q.includes('which tv') || q.includes('broken') || q.includes('failing')) {
+        if (failing.length === 0) reply = 'All 70 TV panels across the 4x3 matrix are healthy and operational.';
+        else reply = `Attention operator: ${failing.length} display(s) have anomalies: ${failing.map(t => t.id).join(', ')}.`;
+      } else if (q.includes('drone') || q.includes('bot')) {
+        reply = `Maintenance drone ${bot.name} is in phase ${bot.phase}. ${bot.label}.`;
+      } else if (q.includes('fault') || q.includes('break') || q.includes('test')) {
+        triggerManualAnomaly();
+        reply = 'Manual fault injected into hardware bus. Diagnostic test agent alerted.';
+      } else if (q.includes('reset') || q.includes('restore')) {
+        resetAllDisplays();
+        reply = 'Global override executed. All 70 TV displays restored to healthy baseline.';
+      } else {
+        reply = `Status report: 70 displays monitored. Drone ${bot.name} is ${bot.phase}. Video signals locked.`;
+      }
+
+      document.getElementById('transcript-box').innerText = `"${reply}"`;
+      speakText(reply);
+      addLog('COPILOT_BRAIN', 'OPERATOR', 'LOW', 'P3', 'VOICE_QUERY_RESP', reply);
+    }
+
+    // --- 6. ANIMATION & RENDER TICK ---
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Spin Rotors
+      const spinSpeed = bot.phase === 'SLEEP_BENCH' ? 0.05 : 0.8;
+      rotorMeshes.forEach((mesh, idx) => {
+        mesh.rotation.y += (idx % 2 === 0 ? 1 : -1) * spinSpeed;
+      });
+
+      // Drone Position Lerping
+      bot.pos[0] += (bot.targetPos[0] - bot.pos[0]) * 0.08;
+      bot.pos[1] += (bot.targetPos[1] - bot.pos[1]) * 0.08;
+      bot.pos[2] += (bot.targetPos[2] - bot.pos[2]) * 0.08;
+      droneGroup.position.set(...bot.pos);
+
+      // Camera Modes
+      if (cameraMode === 'FOLLOW_BOT' && bot.phase !== 'SLEEP_BENCH') {
+        controls.target.lerp(new THREE.Vector3(...bot.pos), 0.05);
+        camera.position.lerp(new THREE.Vector3(bot.pos[0] + 5, bot.pos[1] + 3, bot.pos[2] + 5), 0.04);
+      } else {
+        orbitAngle += 0.003;
+        const camX = Math.cos(orbitAngle) * 24;
+        const camZ = Math.sin(orbitAngle) * 24;
+        camera.position.lerp(new THREE.Vector3(camX, 15, camZ), 0.02);
+        controls.target.lerp(new THREE.Vector3(0, 2, 0), 0.04);
+      }
+
+      // Equalizer Waveform bars
+      const bars = waveWrap.children;
+      for (let i = 0; i < bars.length; i++) {
+        if (isSpeaking) {
+          bars[i].style.height = `${20 + Math.abs(Math.sin(Date.now() / 150 + i)) * 75}%`;
+        } else {
+          bars[i].style.height = `${15 + (i % 3) * 6}%`;
+        }
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Window resize handler
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
