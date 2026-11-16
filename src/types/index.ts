@@ -1,29 +1,28 @@
-export type TVStatus = 'healthy' | 'failing' | 'repairing' | 'offline';
+export type TVStatus = 'HEALTHY' | 'BROKEN' | 'REPAIRING';
 
-export type TVErrorType = 
-  | 'HDMI_HANDSHAKE_LOSS'
-  | 'POWER_CYCLE_FAILURE'
-  | 'IR_RECEIVER_TIMEOUT'
-  | 'SIGNAL_DESYNC'
-  | 'EDID_CORRUPTION';
+export type TVErrorType =
+  | 'HDMI_HANDSHAKE_LOST'
+  | 'FROZEN_VIDEO_FRAME'
+  | 'BACKLIGHT_INVERTER_FAULT'
+  | 'EDID_SYNC_TIMEOUT'
+  | 'CEC_BUS_COLLISION';
 
-export interface TVState {
-  id: string;
-  standId: string;
-  row: number;
-  col: number;
+export interface TVItem {
+  id: string; // e.g. "TV-01" to "TV-70"
+  standId: string; // e.g. "STAND-R1-C1"
+  row: number; // 0..3
+  col: number; // 0..2
   side: 'front' | 'back';
-  level: number; // 0: bottom, 1: middle, 2: top
+  slot: number; // 0 (bottom), 1 (middle), 2 (top)
   status: TVStatus;
-  errorType?: TVErrorType;
-  signalStrength: number; // 0 - 100
+  error?: TVErrorType;
+  errorCode?: string;
   latencyMs: number;
   temperatureC: number;
-  lastFaultTimestamp?: number;
-  repairPhaseProgress?: number;
+  lastFaultTime?: number;
 }
 
-export interface StandState {
+export interface StandData {
   id: string;
   row: number;
   col: number;
@@ -31,69 +30,71 @@ export interface StandState {
   tvIds: string[];
 }
 
-export type BotPhase = 
-  | 'SLEEP_BENCH'
-  | 'NAVIGATING'
-  | 'ANALYZING_FEED'
-  | 'TRANSMITTING_IR'
-  | 'VERIFYING_SYNC'
-  | 'SYSTEM_RESTORED';
+export type BotPhase =
+  | 'SLEEPING'
+  | 'DISPATCHED'
+  | 'WALKING_TO_STAND'
+  | 'SCANNING_VIA_ROW_CAMERA'
+  | 'SENDING_IR_SIGNAL'
+  | 'VERIFYING_FIX'
+  | 'RETURNING_TO_DESK';
 
-export interface MaintenanceBot {
-  id: string;
-  name: string;
-  position: [number, number, number];
-  targetPosition: [number, number, number];
-  currentStandId: string | null;
-  targetStandId: string | null;
-  currentTvId: string | null;
-  phase: BotPhase;
-  phaseProgress: number; // 0 - 100
-  activeStepLabel: string;
-  homePosition: [number, number, number];
-  batteryLevel: number;
-  retryAttempts: number;
-  lastRepairedTvId?: string;
+export interface Waypoint {
+  x: number;
+  z: number;
 }
 
-export type MessageSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-export type AssignedPriority = 'P0' | 'P1' | 'P2' | 'P3';
+export interface CreatureBotState {
+  name: string;
+  phase: BotPhase;
+  currentTvId: string | null;
+  targetStandId: string | null;
+  activeStepLabel: string;
+  battery: number;
+  mood: 'SLEEPING' | 'WALKING' | 'REPAIRING' | 'HAPPY';
+  
+  // High-frequency runtime waypoint coordinates
+  homePosition: [number, number, number];
+  currentPos: [number, number, number];
+  targetPos: [number, number, number];
+  waypoints: Waypoint[];
+  currentWaypointIndex: number;
+  facingAngle: number;
+  targetFacingAngle: number;
+  
+  // Phase progress (0 to 100)
+  phaseProgress: number;
+}
 
-export interface AgentStructuredMessage {
+export interface DiagnosticTicket {
+  id: string;
+  severity: 'P0_CRITICAL' | 'P1_HIGH' | 'P2_MEDIUM';
+  tvId: string;
+  standId: string;
+  row: number;
+  col: number;
+  side: 'front' | 'back';
+  slot: number;
+  error: TVErrorType;
+  errorCode: string;
+  timestamp: string;
+}
+
+export interface AgentLogMessage {
   id: string;
   timestamp: string;
-  sender: 'TEST_AGENT' | 'REPAIR_AGENT' | 'BACKEND_ORCHESTRATOR' | 'COPILOT_BRAIN';
-  recipient: 'TEST_AGENT' | 'REPAIR_AGENT' | 'BACKEND_ORCHESTRATOR' | 'COPILOT_BRAIN' | 'ALL';
-  severity: MessageSeverity;
-  error_signature: string;
-  assigned_priority: AssignedPriority;
-  tvId?: string;
-  standId?: string;
+  sender: 'TEST_RUNNER' | 'CREATURE_BOT' | 'LAB_SUPERVISOR' | 'SYSTEM';
+  recipient: 'TEST_RUNNER' | 'CREATURE_BOT' | 'LAB_SUPERVISOR' | 'ALL';
+  type: 'TICKET_DISPATCH' | 'BOT_ACK' | 'SCAN_FEED' | 'IR_BURST' | 'VERIFY_OK' | 'SYSTEM_INFO';
   message: string;
-  metadata?: Record<string, unknown>;
+  ticket?: DiagnosticTicket;
+  rawJson?: Record<string, unknown>;
 }
 
-export interface LabDimensions {
-  rows: number;
-  cols: number;
-  standSpacingX: number;
-  standSpacingZ: number;
-  tvsPerStand: number;
-  totalActiveTvs: number;
-}
-
-export interface HardwareSimConfig {
-  packetDropRate: number; // e.g. 0.08 (8% packet drop rate)
-  propagationDelayMs: number; // e.g. 240ms
-  autoAnomalyIntervalMs: number; // e.g. 8000ms
-  isSimulationRunning: boolean;
-}
-
-export interface CameraSensor {
+export interface OverheadCamera {
   id: string;
+  row: number;
   position: [number, number, number];
-  aisleIndex: number;
-  isInspecting: boolean;
-  focusedTvId: string | null;
+  targetLookAt: [number, number, number];
+  isActive: boolean;
 }
-
