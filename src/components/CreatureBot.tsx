@@ -13,10 +13,11 @@ export const CreatureBot: React.FC = () => {
   const leftEyeRef = useRef<THREE.Mesh>(null);
   const rightEyeRef = useRef<THREE.Mesh>(null);
   const antennaBulbRef = useRef<THREE.Mesh>(null);
-  const irBeamRef = useRef<THREE.Mesh>(null);
+  const beamGroupRef = useRef<THREE.Group>(null);
+  const beamLightRef = useRef<THREE.PointLight>(null);
   const coreRef = useRef<THREE.Mesh>(null);
 
-  // Subscribe to lightweight label for the overhead pill
+  // Subscribe to lightweight labels for overhead UI
   const activeStepLabel = useLabStore(state => state.bot.activeStepLabel);
   const botPhase = useLabStore(state => state.bot.phase);
   const botMood = useLabStore(state => state.bot.mood);
@@ -27,7 +28,7 @@ export const CreatureBot: React.FC = () => {
     const store = useLabStore.getState();
     store.tickSimulation(delta);
 
-    const { bot, simSpeed } = store;
+    const { bot, tvs, simSpeed } = store;
     if (!groupRef.current) return;
 
     // 2. Smooth position and orientation interpolation directly on Three.js transforms
@@ -43,13 +44,15 @@ export const CreatureBot: React.FC = () => {
     groupRef.current.rotation.y += angleDiff * Math.min(1, 10 * delta * simSpeed);
 
     const t = state.clock.getElapsedTime();
+    const currentTv = bot.currentTvId ? tvs[bot.currentTvId] : null;
 
-    // 3. Phase-dependent expressive animations
+    // 3. Phase-dependent expressive animations and dynamic head pitch
     if (bot.mood === 'WALKING') {
-      // Cute Microduck waddle tilt
+      // Body upright and waddle
       if (bodyRef.current) {
         bodyRef.current.rotation.z = Math.sin(t * 14 * simSpeed) * 0.12;
         bodyRef.current.position.y = 0.55 + Math.abs(Math.sin(t * 14 * simSpeed)) * 0.06;
+        bodyRef.current.rotation.x = THREE.MathUtils.lerp(bodyRef.current.rotation.x, 0, 8 * delta);
       }
       // Stepping stubby feet
       if (leftFootRef.current && rightFootRef.current) {
@@ -58,7 +61,7 @@ export const CreatureBot: React.FC = () => {
       }
       // Reset head tilt
       if (headRef.current) {
-        headRef.current.rotation.x = Math.sin(t * 7) * 0.04;
+        headRef.current.rotation.x = THREE.MathUtils.lerp(headRef.current.rotation.x, Math.sin(t * 7) * 0.04, 8 * delta);
       }
       // Wide open bright eyes
       if (leftEyeRef.current && rightEyeRef.current) {
@@ -68,13 +71,15 @@ export const CreatureBot: React.FC = () => {
         rightEyeRef.current.rotation.z = 0;
       }
       // IR Beam hidden
-      if (irBeamRef.current) irBeamRef.current.visible = false;
+      if (beamGroupRef.current) beamGroupRef.current.visible = false;
+      if (beamLightRef.current) beamLightRef.current.intensity = 0;
 
     } else if (bot.mood === 'SLEEPING') {
       // Dormant breathing bob
       if (bodyRef.current) {
         bodyRef.current.rotation.z = 0;
         bodyRef.current.position.y = 0.52 + Math.sin(t * 2) * 0.02;
+        bodyRef.current.rotation.x = THREE.MathUtils.lerp(bodyRef.current.rotation.x, 0, 8 * delta);
       }
       if (leftFootRef.current && rightFootRef.current) {
         leftFootRef.current.position.y = 0;
@@ -82,7 +87,7 @@ export const CreatureBot: React.FC = () => {
       }
       // Head tilted gently downwards
       if (headRef.current) {
-        headRef.current.rotation.x = 0.25;
+        headRef.current.rotation.x = THREE.MathUtils.lerp(headRef.current.rotation.x, 0.25, 8 * delta);
       }
       // Eyes as sleepy horizontal slits (- -)
       if (leftEyeRef.current && rightEyeRef.current) {
@@ -92,21 +97,50 @@ export const CreatureBot: React.FC = () => {
         rightEyeRef.current.rotation.z = 0;
       }
       // IR Beam hidden
-      if (irBeamRef.current) irBeamRef.current.visible = false;
+      if (beamGroupRef.current) beamGroupRef.current.visible = false;
+      if (beamLightRef.current) beamLightRef.current.intensity = 0;
 
     } else if (bot.mood === 'REPAIRING') {
-      // Focused determined stance
+      // DYNAMIC HEAD & BODY PITCH TO LOOK DIRECTLY AT THE TV (INCLUDING TOP TV!)
+      let targetBodyPitch = 0;
+      let targetHeadPitch = -0.15;
+      let beamDistance = 1.4;
+
+      if (currentTv) {
+        // Vertical TV height in LabScene:
+        // Slot 0 (bottom): 1.1m
+        // Slot 1 (middle): 2.1m
+        // Slot 2 (top):    3.1m
+        const tvY = 1.1 + currentTv.slot * 1.0;
+        const botHeadY = 1.09;
+        const deltaY = tvY - botHeadY;
+        const horizontalDist = 1.15;
+
+        // Total pitch angle: negative X rotation tilts upward in Three.js
+        const fullPitch = -Math.atan2(deltaY, horizontalDist);
+
+        // Distribute pitch between charming torso backward lean and head tilt
+        targetBodyPitch = fullPitch * 0.22;
+        targetHeadPitch = fullPitch * 0.82;
+
+        // Exact 3D hypotenuse distance to the screen face
+        beamDistance = Math.hypot(deltaY, horizontalDist);
+      }
+
+      // Smoothly pitch body & head up
       if (bodyRef.current) {
         bodyRef.current.rotation.z = 0;
         bodyRef.current.position.y = 0.55;
+        bodyRef.current.rotation.x = THREE.MathUtils.lerp(bodyRef.current.rotation.x, targetBodyPitch, 10 * delta * simSpeed);
       }
       if (leftFootRef.current && rightFootRef.current) {
         leftFootRef.current.position.y = 0;
         rightFootRef.current.position.y = 0;
       }
       if (headRef.current) {
-        headRef.current.rotation.x = -0.1; // looking slightly up at TV
+        headRef.current.rotation.x = THREE.MathUtils.lerp(headRef.current.rotation.x, targetHeadPitch, 10 * delta * simSpeed);
       }
+
       // Determined squinted eyes (> <)
       if (leftEyeRef.current && rightEyeRef.current) {
         leftEyeRef.current.scale.set(1.0, 0.35, 1.0);
@@ -115,19 +149,41 @@ export const CreatureBot: React.FC = () => {
         rightEyeRef.current.rotation.z = -0.38;
       }
 
-      // Pulsing antenna & visible IR signal beam
-      if (antennaBulbRef.current) {
-        const pulse = 1.0 + Math.sin(t * 18) * 0.6;
-        (antennaBulbRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = pulse * 2.5;
-      }
-
-      if (irBeamRef.current) {
+      // 4. CONICAL BEAM AIMING & RAPID IR STROBE BLINKING
+      if (beamGroupRef.current) {
         if (bot.phase === 'SENDING_IR_SIGNAL') {
-          irBeamRef.current.visible = true;
-          const beamPulse = 0.4 + Math.sin(t * 22) * 0.35;
-          (irBeamRef.current.material as THREE.MeshBasicMaterial).opacity = beamPulse;
+          // Rapid IR strobe cycle (18-20Hz blinking burst)
+          const blinkCycle = Math.sin(t * 36);
+          const isBlinkOn = blinkCycle > -0.15; // on 55% of the time, off 45%
+
+          // Scale beam along Z to reach the exact TV screen face
+          beamGroupRef.current.scale.set(1, 1, beamDistance);
+
+          if (isBlinkOn) {
+            beamGroupRef.current.visible = true;
+            if (beamLightRef.current) {
+              beamLightRef.current.intensity = 3.5;
+            }
+            if (antennaBulbRef.current) {
+              (antennaBulbRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = 4.0;
+            }
+          } else {
+            beamGroupRef.current.visible = false;
+            if (beamLightRef.current) {
+              beamLightRef.current.intensity = 0;
+            }
+            if (antennaBulbRef.current) {
+              (antennaBulbRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.5;
+            }
+          }
         } else {
-          irBeamRef.current.visible = false;
+          // Not actively sending IR signal
+          beamGroupRef.current.visible = false;
+          if (beamLightRef.current) beamLightRef.current.intensity = 0;
+          if (antennaBulbRef.current) {
+            const idlePulse = 1.0 + Math.sin(t * 8) * 0.4;
+            (antennaBulbRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = idlePulse;
+          }
         }
       }
     }
@@ -270,21 +326,57 @@ export const CreatureBot: React.FC = () => {
             <pointLight color="#00f3ff" intensity={1.5} distance={3} decay={2} position={[0, 0.22, 0]} />
           </group>
 
-          {/* Pulsing IR Signal Beam (translucent cone) */}
-          <mesh 
-            ref={irBeamRef} 
-            position={[0, 0.15, 1.2]} 
-            rotation={[Math.PI / 2, 0, 0]}
-            visible={false}
-          >
-            <coneGeometry args={[0.35, 2.0, 16, 1, true]} />
-            <meshBasicMaterial 
-              color="#38bdf8" 
-              transparent 
-              opacity={0.5} 
-              side={THREE.DoubleSide} 
-            />
-          </mesh>
+          {/* ----------------------------------------------------------- */}
+          {/* HIGH-TECH DYNAMIC CONICAL IR BEAM (BLINKS & AIMS DIRECTLY) */}
+          {/* ----------------------------------------------------------- */}
+          <group ref={beamGroupRef} position={[0, 0.22, 0.2]} visible={false}>
+            {/* 1. Outer Expanding Conical Beam Shroud */}
+            <mesh position={[0, 0, 0.5]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.38, 0.03, 1.0, 24, 1, true]} />
+              <meshBasicMaterial 
+                color="#38bdf8" 
+                transparent 
+                opacity={0.45} 
+                side={THREE.DoubleSide} 
+                depthWrite={false}
+              />
+            </mesh>
+
+            {/* 2. Intense Core Laser Line */}
+            <mesh position={[0, 0, 0.5]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.09, 0.015, 1.0, 16, 1, false]} />
+              <meshBasicMaterial 
+                color="#e0f2fe" 
+                transparent 
+                opacity={0.85} 
+                side={THREE.DoubleSide} 
+                depthWrite={false}
+              />
+            </mesh>
+
+            {/* 3. Wavefront Beam Pulse Rings */}
+            <mesh position={[0, 0, 0.33]}>
+              <ringGeometry args={[0.08, 0.14, 20]} />
+              <meshBasicMaterial color="#00f3ff" transparent opacity={0.7} side={THREE.DoubleSide} depthWrite={false} />
+            </mesh>
+            <mesh position={[0, 0, 0.66]}>
+              <ringGeometry args={[0.18, 0.26, 24]} />
+              <meshBasicMaterial color="#00f3ff" transparent opacity={0.7} side={THREE.DoubleSide} depthWrite={false} />
+            </mesh>
+
+            {/* 4. Impact Reticle Target Ring on the TV Screen Face */}
+            <mesh position={[0, 0, 1.0]}>
+              <ringGeometry args={[0.16, 0.34, 24]} />
+              <meshBasicMaterial color="#f59e0b" transparent opacity={0.9} side={THREE.DoubleSide} />
+            </mesh>
+            <mesh position={[0, 0, 1.0]}>
+              <circleGeometry args={[0.1, 16]} />
+              <meshBasicMaterial color="#ffffff" transparent opacity={0.95} side={THREE.DoubleSide} />
+            </mesh>
+
+            {/* 5. Synchronized Blinking Point Light Casting onto Screen */}
+            <pointLight ref={beamLightRef} color="#38bdf8" intensity={3.5} distance={5} decay={2} position={[0, 0, 1.0]} />
+          </group>
         </group>
       </group>
 

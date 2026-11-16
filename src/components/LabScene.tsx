@@ -14,6 +14,8 @@ const SceneCameraController: React.FC = () => {
   const cameraMode = useLabStore(state => state.cameraMode);
   const botPhase = useLabStore(state => state.bot.phase);
   const targetStandId = useLabStore(state => state.bot.targetStandId);
+  const currentTvId = useLabStore(state => state.bot.currentTvId);
+  const tvs = useLabStore(state => state.tvs);
   const stands = useLabStore(state => state.stands);
 
   // Transition camera when bot phase changes in AUTO_FOLLOW mode
@@ -25,18 +27,25 @@ const SceneCameraController: React.FC = () => {
       cameraControlsRef.current.setLookAt(13.5, 12.5, 13.5, 0, 1.2, 0, true);
     } else if (targetStandId && stands[targetStandId]) {
       const stand = stands[targetStandId];
-      // Smoothly frame the active stand and creature-bot
+      const tv = currentTvId ? tvs[currentTvId] : null;
+      
+      // Dynamically elevate camera if target TV is a higher slot (especially top slot 2 at 3.1m)
+      const isTopSlot = tv?.slot === 2;
+      const camY = isTopSlot ? 3.4 : 2.6;
+      const lookY = isTopSlot ? 2.3 : 1.6;
+
+      // Smoothly frame the active stand, top TV, and creature-bot looking up
       cameraControlsRef.current.setLookAt(
-        stand.position[0] + 3.2,
-        2.6,
-        stand.position[2] + 3.4,
+        stand.position[0] + 3.4,
+        camY,
+        stand.position[2] + 3.6,
         stand.position[0],
-        1.6,
+        lookY,
         stand.position[2],
         true
       );
     }
-  }, [botPhase, targetStandId, cameraMode, stands]);
+  }, [botPhase, targetStandId, currentTvId, cameraMode, stands, tvs]);
 
   return (
     <CameraControls 
